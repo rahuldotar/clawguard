@@ -592,6 +592,13 @@ export const OpenClawSchema = z
               .strict(),
           )
           .optional(),
+        enterprise: z
+          .object({
+            requireApproval: z.boolean().optional(),
+            approvedSkills: z.array(z.string()).optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .optional(),

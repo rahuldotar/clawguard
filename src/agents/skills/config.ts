@@ -81,6 +81,16 @@ export function shouldIncludeSkill(params: {
   if (skillConfig?.enabled === false) {
     return false;
   }
+
+  // Enterprise governance: block unapproved skills when requireApproval is set.
+  const enterprise = config?.skills?.enterprise;
+  if (enterprise?.requireApproval) {
+    const approved = normalizeAllowlist(enterprise.approvedSkills);
+    if (approved && !approved.includes(skillKey) && !approved.includes(entry.skill.name)) {
+      return false;
+    }
+  }
+
   if (!isBundledSkillAllowed(entry, allowBundled)) {
     return false;
   }

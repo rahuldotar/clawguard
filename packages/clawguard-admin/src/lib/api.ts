@@ -1,0 +1,151 @@
+/**
+ * ClawGuard control plane API client for the admin console.
+ */
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4100";
+
+type FetchOptions = {
+  method?: string;
+  body?: unknown;
+  token?: string;
+};
+
+async function apiFetch<T>(path: string, opts: FetchOptions = {}): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (opts.token) {
+    headers.Authorization = `Bearer ${opts.token}`;
+  }
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: opts.method ?? "GET",
+    headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`API error (${response.status}): ${text}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+// --- Policies ---
+
+export type EffectivePolicy = {
+  version: number;
+  tools: { allow?: string[]; deny?: string[]; profile?: string };
+  skills: {
+    approved: Array<{ name: string; key: string; scope: string }>;
+    requireApproval: boolean;
+  };
+  killSwitch: { active: boolean; message?: string };
+  auditLevel: string;
+};
+
+export function getPolicy(orgId: string, token: string) {
+  return apiFetch<EffectivePolicy>(`/api/v1/policies/${orgId}`, { token });
+}
+
+export function getEffectivePolicy(orgId: string, token: string) {
+  return apiFetch<EffectivePolicy>(`/api/v1/policies/${orgId}/effective`, { token });
+}
+
+export function updatePolicy(orgId: string, token: string, body: unknown) {
+  return apiFetch(`/api/v1/policies/${orgId}`, { method: "PUT", token, body });
+}
+
+export function setKillSwitch(orgId: string, token: string, active: boolean, message?: string) {
+  return apiFetch(`/api/v1/policies/${orgId}/kill-switch`, {
+    method: "PUT",
+    token,
+    body: { active, message },
+  });
+}
+
+// --- Skills ---
+
+export type SkillSubmission = {
+  id: string;
+  skillName: string;
+  skillKey?: string;
+  metadata?: Record<string, unknown>;
+  manifestContent?: string;
+  scanResults?: {
+    scannedFiles: number;
+    critical: number;
+    warn: number;
+    info: number;
+    findings: Array<{
+      ruleId: string;
+      severity: string;
+      file: string;
+      line: number;
+      message: string;
+      evidence: string;
+    }>;
+  };
+  status: string;
+  reviewNotes?: string;
+  createdAt: string;
+};
+
+export function getPendingSkills(orgId: string, token: string) {
+  return apiFetch<{ submissions: SkillSubmission[] }>(`/api/v1/skills/${orgId}/review`, { token });
+}
+
+export function getApprovedSkills(orgId: string, token: string) {
+  return apiFetch<{ skills: Array<{ skillName: string; skillKey: string; scope: string }> }>(
+    `/api/v1/skills/${orgId}/approved`,
+    { token },
+  );
+}
+
+export function reviewSkill(
+  orgId: string,
+  id: string,
+  token: string,
+  body: { status: string; reviewNotes?: string },
+) {
+  return apiFetch(`/api/v1/skills/${orgId}/review/${id}`, {
+    method: "PUT",
+    token,
+    body,
+  });
+}
+
+// --- Audit ---
+
+export type AuditEvent = {
+  id: string;
+  userId: string;
+  eventType: string;
+  toolName?: string;
+  outcome: string;
+  agentId?: string;
+  sessionKey?: string;
+  metadata?: Record<string, unknown>;
+  timestamp: string;
+};
+
+export function queryAudit(orgId: string, token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ events: AuditEvent[] }>(`/api/v1/audit/${orgId}/query${qs}`, { token });
+}
+
+// --- Users ---
+
+export type OrgUser = {
+  id: string;
+  email: string;
+  name?: string;
+  role: string;
+  lastSeenAt?: string;
+  createdAt: string;
+};
+
+export function getUsers(orgId: string, token: string) {
+  return apiFetch<{ users: OrgUser[] }>(`/api/v1/users/${orgId}`, { token });
+}
